@@ -1,0 +1,13 @@
+Parameter,Value Low,Value High
+Ellipticity,0.9,1.0
+Major Axis Length,2000,2200
+Minor Axis Length,1000,1200
+Angle of Rotation,0,90
+Area of Scaled Ellipse,3000000,3500000
+Area of Original Binary Mask,2900000,3400000
+Ratio of Mask Area to Ellipse Area,0.85,1.0
+Perimeter of Ellipse,4000,4500
+Perimeter of Original Binary Mask,3900,4400
+Perimeter of Morphological Binary Mask,3950,4450
+Perimeter Ratio (Ellipse/Original Mask),1.02,1.08
+Perimeter Ratio (Ellipse/Morph Mask),1.01,1.07
