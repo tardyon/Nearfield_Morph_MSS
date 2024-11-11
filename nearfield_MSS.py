@@ -1,14 +1,15 @@
 """
 Nearfield Morphological Ellipse Discriminator.
- 
-Version: 2.0.0
+
+Version: 2.1.0
 Author: Michael C.M. Varney
-Revision Notes: Integrated Machine Safety Filter (MSS) to evaluate morphological parameters against specified criteria. Added functionality to read pass/fail criteria from a CSV file, implemented pass/fail logic, structured output generation, and enhanced output management by creating "failed" subfolders for images that do not meet safety criteria.
+Revision Notes: 
+- Replaced the "failed" subfolder mechanism with a consolidated mss_summary.csv file.
+- The summary CSV includes overall pass/fail status and individual metric evaluations in binary form.
+- Enhanced code modularity and clarity for better maintainability.
 Changelog:
-- Added MSS integration to evaluate parameters against criteria.
-- Implemented reading of pass/fail criteria from user-provided CSV.
-- Added pass/fail evaluation and structured result output.
-- Created "failed" subfolders for non-compliant images.
+- Removed failed subfolder creation.
+- Added generation of mss_summary.csv with detailed pass/fail information.
 - Updated versioning and revision history.
 """
 
@@ -16,7 +17,6 @@ import os
 import math
 import csv
 import logging
-import shutil
 from datetime import datetime
 from tkinter import Tk, messagebox
 from tkinter.filedialog import askopenfilenames, askopenfilename
@@ -431,18 +431,18 @@ def save_stats_summary(data, results_dir, image_path):
         write_stat("Area of Original Binary Mask", data["binary_area"])
         write_stat(
             "Ratio of Mask Area to Ellipse Area",
-            data["binary_area"] / data["area"],
+            data["binary_area"] / data["area"] if data["area"] != 0 else 0,
         )
         write_stat("Perimeter of Ellipse", data["ellipse_perimeter"])
         write_stat("Perimeter of Original Binary Mask", data["binary_perimeter"])
         write_stat("Perimeter of Morphological Binary Mask", data["morph_perimeter"])
         write_stat(
             "Perimeter Ratio (Ellipse/Original Mask)",
-            data["ellipse_perimeter"] / data["binary_perimeter"],
+            data["ellipse_perimeter"] / data["binary_perimeter"] if data["binary_perimeter"] != 0 else 0,
         )
         write_stat(
             "Perimeter Ratio (Ellipse/Morph Mask)",
-            data["ellipse_perimeter"] / data["morph_perimeter"],
+            data["ellipse_perimeter"] / data["morph_perimeter"] if data["morph_perimeter"] != 0 else 0,
         )
 
     print(f"Stats summary saved to: {summary_csv_path}")
@@ -465,13 +465,16 @@ def evaluate_parameters(parameters, criteria):
             low, high = criteria[param]
             if low <= value <= high:
                 status = "Pass"
+                binary = 1
             else:
                 status = "Fail"
+                binary = 0
             evaluation_results[param] = {
                 "Value": value,
                 "Value Low": low,
                 "Value High": high,
                 "Status": status,
+                "Binary": binary,
             }
         else:
             evaluation_results[param] = {
@@ -479,6 +482,7 @@ def evaluate_parameters(parameters, criteria):
                 "Value Low": "N/A",
                 "Value High": "N/A",
                 "Status": "No Criteria",
+                "Binary": "N/A",
             }
     return evaluation_results
 
@@ -497,7 +501,7 @@ def save_evaluation_results(evaluation_results, results_dir, image_path):
 
     with open(evaluation_csv_path, "w", newline="") as csv_file:
         writer = csv.writer(csv_file)
-        writer.writerow(["Parameter", "Value", "Value Low", "Value High", "Status"])
+        writer.writerow(["Parameter", "Value", "Value Low", "Value High", "Status", "Binary"])
 
         for param, result in evaluation_results.items():
             writer.writerow([
@@ -505,13 +509,85 @@ def save_evaluation_results(evaluation_results, results_dir, image_path):
                 result["Value"],
                 result["Value Low"],
                 result["Value High"],
-                result["Status"]
+                result["Status"],
+                result["Binary"]
             ])
 
     print(f"Evaluation results saved to: {evaluation_csv_path}")
 
 
-def process_image(image_path, results_dir, criteria=None):
+def load_mss_criteria(csv_path):
+    """
+    Load MSS pass/fail criteria from a CSV file.
+
+    Args:
+        csv_path (str): Path to the criteria CSV file.
+
+    Returns:
+        dict: Dictionary with parameter names as keys and (low, high) tuples as values.
+    """
+    criteria = {}
+    try:
+        with open(csv_path, mode="r", newline="") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                param = row["Parameter"].strip()
+                low = float(row["Value Low"].strip())
+                high = float(row["Value High"].strip())
+                criteria[param] = (low, high)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error loading MSS criteria CSV: {str(e)}")
+    return criteria
+
+
+def generate_mss_summary(mss_summary_data, results_dir):
+    """
+    Generate the mss_summary.csv file in the top-level run directory.
+
+    Args:
+        mss_summary_data (list): List of dictionaries containing per-image evaluation data.
+        results_dir (str): Directory to save the mss_summary.csv.
+    """
+    summary_csv_path = os.path.join(results_dir, "mss_summary.csv")
+
+    # Determine all metric names from the first image's evaluation
+    if not mss_summary_data:
+        print("No data available to generate mss_summary.csv.")
+        return
+
+    first_evaluation = mss_summary_data[0]["evaluation"]
+    metric_names = list(first_evaluation.keys())
+
+    with open(summary_csv_path, "w", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        # Header
+        header = ["Image Name", "Pass/Fail", "Pass/Fail (Binary)"] + metric_names
+        writer.writerow(header)
+
+        for entry in mss_summary_data:
+            image_name = os.path.basename(entry["image_path"])
+            evaluations = entry["evaluation"]
+
+            # Determine overall Pass/Fail
+            overall_pass = all(
+                detail["Status"] == "Pass" for detail in evaluations.values() if detail["Status"] != "No Criteria"
+            )
+            overall_status = "Pass" if overall_pass else "Fail"
+            overall_binary = 1 if overall_pass else 0
+
+            # Collect binary pass/fail for each metric
+            metric_binaries = []
+            for metric in metric_names:
+                binary = evaluations[metric]["Binary"]
+                metric_binaries.append(binary)
+
+            # Write row
+            writer.writerow([image_name, overall_status, overall_binary] + metric_binaries)
+
+    print(f"MSS summary saved to: {summary_csv_path}")
+
+
+def process_image(image_path, results_dir):
     """Process image without GUI operations."""
     try:
         logger = logging.getLogger(__name__)
@@ -842,7 +918,7 @@ def process_image(image_path, results_dir, criteria=None):
         else:
             logger.info("The scaled ellipse encloses all values of 255 in the morphologically processed binary mask.")
 
-        # Return the data needed for figure creation
+        # Return the data needed for figure creation and evaluation
         return {
             "overlay_binary": overlay_binary,
             "overlay_morph": overlay_morph,
@@ -862,33 +938,10 @@ def process_image(image_path, results_dir, criteria=None):
             "image_path": image_path,
             "statistics": statistics,
         }
+
     except Exception as e:
         logger.error(f"Error processing {image_path}: {str(e)}")
         return None
-
-
-def load_mss_criteria(csv_path):
-    """
-    Load MSS pass/fail criteria from a CSV file.
-
-    Args:
-        csv_path (str): Path to the criteria CSV file.
-
-    Returns:
-        dict: Dictionary with parameter names as keys and (low, high) tuples as values.
-    """
-    criteria = {}
-    try:
-        with open(csv_path, mode="r", newline="") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                param = row["Parameter"].strip()
-                low = float(row["Value Low"].strip())
-                high = float(row["Value High"].strip())
-                criteria[param] = (low, high)
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Error loading MSS criteria CSV: {str(e)}")
-    return criteria
 
 
 def main():
@@ -935,7 +988,7 @@ def main():
             "\nWARNING: Display figure enabled - only the last image's figure will be displayed.\n"
         )
 
-    # Collect data for figure creation
+    # Collect data for figure creation and MSS summary
     figure_data_list = []
     evaluation_results_list = []
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -951,7 +1004,7 @@ def main():
             else:
                 logger.warning("Processing returned no data.")
 
-    # Now create and save figures in the main thread
+    # Now create and save figures and evaluate parameters in the main thread
     for data in figure_data_list:
         figure_path = create_and_save_figure(
             data["overlay_binary"],
@@ -998,22 +1051,9 @@ def main():
                 "evaluation": evaluation_results
             })
 
-    # Handle failed evaluations by copying results to a 'failed' subfolder
+    # Generate mss_summary.csv
     if INCLUDE_MSS_ANALYSIS:
-        for result in evaluation_results_list:
-            image_path = result["image_path"]
-            evaluations = result["evaluation"]
-            image_name = os.path.basename(image_path)
-            failed = any(detail["Status"] == "Fail" for detail in evaluations.values())
-
-            if failed:
-                failed_dir = os.path.join(results_dir, "failed", os.path.splitext(image_name)[0])
-                os.makedirs(failed_dir, exist_ok=True)
-                # Copy all relevant files to the failed directory
-                for file in os.listdir(results_dir):
-                    if file.startswith(os.path.splitext(image_name)[0]):
-                        shutil.copy(os.path.join(results_dir, file), failed_dir)
-                logger.info(f"Image {image_name} failed MSS criteria. Results copied to {failed_dir}.")
+        generate_mss_summary(evaluation_results_list, results_dir)
 
     # Handle figure display in the main thread
     if DISPLAY_FIGURE and figure_data_list:
