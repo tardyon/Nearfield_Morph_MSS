@@ -3,9 +3,11 @@ Nearfield Morphological Ellipse Discriminator.
 
 Version: 2.1.0
 Author: Michael C.M. Varney
-Revision Notes: 
-- Replaced the "failed" subfolder mechanism with a consolidated mss_summary.csv file.
-- The summary CSV includes overall pass/fail status and individual metric evaluations in binary form.
+Revision Notes:
+- Replaced the "failed" subfolder mechanism with a consolidated 
+  mss_summary.csv file.
+- The summary CSV includes overall pass/fail status and individual 
+  metric evaluations in binary form.
 - Enhanced code modularity and clarity for better maintainability.
 Changelog:
 - Removed failed subfolder creation.
