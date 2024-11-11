@@ -50,7 +50,7 @@ KERNEL_SIZE = (2, 2)
 
 # Ellipse fitting parameters
 SCALE_FACTOR = 1
-ELLIPSE_THICKNESS = 2  # Reduced thickness for better visualization
+ELLIPSE_THICKNESS = 20  # Reduced thickness for better visualization
 
 # Monte Carlo simulation parameters
 EPOCH_SIZE = 50  # Number of samples in an epoch
@@ -71,17 +71,13 @@ AREA_WEIGHT = 0.1  # Weight for the area penalty in the combined score
 
 # Output parameters
 DEFAULT_FILE_TYPE = "png"  # Default file type for saving output images ('tiff', 'png', 'jpg')
-DISPLAY_FIGURE = False  # Flag to control displaying the figure
 
 # Machine Safety System (MSS) parameters
 INCLUDE_MSS_ANALYSIS = True  # Flag to include MSS analysis
 CRITERIA_CSV_PATH = ""  # To be set by user input if MSS is enabled
 
 # Set matplotlib backend based on DISPLAY_FIGURE
-if DISPLAY_FIGURE:
-    matplotlib.use("TkAgg")  # Interactive backend
-else:
-    matplotlib.use("Agg")  # Non-interactive backend
+matplotlib.use("Agg")  # Non-interactive backend
 
 
 def ellipse_circumference(a, b):
@@ -530,7 +526,7 @@ def load_mss_criteria(csv_path):
     """
     criteria = {}
     try:
-        with open(csv_path, mode="r", newline="") as file:
+        with open(csv_path, mode="r", newline="") as file:  # Removed extra parenthesis
             reader = csv.DictReader(file)
             for row in reader:
                 param = row["Parameter"].strip()
@@ -985,11 +981,6 @@ def main():
             return
         logger.info(f"Loaded MSS criteria from: {criteria_csv_path}")
 
-    if len(file_paths) > 1 and DISPLAY_FIGURE:
-        logger.warning(
-            "\nWARNING: Display figure enabled - only the last image's figure will be displayed.\n"
-        )
-
     # Collect data for figure creation and MSS summary
     figure_data_list = []
     evaluation_results_list = []
@@ -1056,37 +1047,6 @@ def main():
     # Generate mss_summary.csv
     if INCLUDE_MSS_ANALYSIS:
         generate_mss_summary(evaluation_results_list, results_dir)
-
-    # Handle figure display in the main thread
-    if DISPLAY_FIGURE and figure_data_list:
-        matplotlib.use("TkAgg")
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.withdraw()
-
-        for data in figure_data_list:
-            figure_path = create_and_save_figure(
-                data["overlay_binary"],
-                data["overlay_morph"],
-                data["ellipse_data"],
-                data["ellipticity"],
-                data["scaled_major_axis_length"],
-                data["scaled_minor_axis_length"],
-                data["scaled_angle"],
-                data["area"],
-                data["mask_area"],
-                data["area_ratio_morph"],
-                data["morph_perimeter"],
-                data["ellipse_perimeter"],
-                data["binary_area"],
-                data["binary_perimeter"],
-                data["results_dir"],
-                data["image_path"],
-            )
-            if figure_path:
-                logger.info("Saved figure: %s", figure_path)
-            save_stats_summary(data, data["results_dir"], data["image_path"])
 
 
 if __name__ == "__main__":
