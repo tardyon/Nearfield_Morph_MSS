@@ -1,6 +1,6 @@
 """
 Nearfield Morphological Ellipse Discriminator.
-
+ 
 Version: 2.0.0
 Author: Michael C.M. Varney
 Revision Notes: Integrated Machine Safety Filter (MSS) to evaluate morphological parameters against specified criteria. Added functionality to read pass/fail criteria from a CSV file, implemented pass/fail logic, structured output generation, and enhanced output management by creating "failed" subfolders for images that do not meet safety criteria.
